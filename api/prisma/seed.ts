@@ -63,7 +63,7 @@ async function main() {
 
   let historyCount = 0
   for (const row of historyData) {
-    const score1Str = row.scoreteam1scoreteam2 || row.scoreteam1 || '0'
+    const score1Str = row.scoreteam1 || '0'
     const score2Str = row.scoreteam2 || '0'
 
     await prisma.matchHistorique.create({

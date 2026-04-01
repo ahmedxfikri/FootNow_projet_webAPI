@@ -1,4 +1,6 @@
-<?php require_once("auth_check.php"); ?>
+<?php
+/*Auteur: Soukaina Moussalli*/
+require_once("auth_check.php"); ?>
 
 <!DOCTYPE html>
 <html lang="fr">

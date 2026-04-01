@@ -277,12 +277,11 @@ body {
 /* BODY */
 body {
   margin: 0;
+  padding: 0;
+
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  cursor: url("/assets/images/cursor.cur") 16 16, auto;
-  font-family: 'Rajdhani', sans-serif;
-  color: #eef4ff;
 }
 
 .section-title {
@@ -966,3 +965,23 @@ body {
         0 0 60px #ff6b00 !important;
     font-weight: bold !important;
 }
+
+.search-bar {
+  display: block;
+  margin: 30px auto;
+  padding: 12px 20px;
+
+  width: 300px;
+
+  border-radius: 10px;
+  border: 2px solid #FFD700;
+
+  background: rgba(0,0,0,0.6);
+  color: white;
+
+  font-size: 16px;
+  text-align: center;
+
+  box-shadow: 0 0 15px rgba(255,215,0,0.5);
+}
+

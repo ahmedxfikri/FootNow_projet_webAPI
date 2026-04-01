@@ -1,5 +1,4 @@
 <?php
-/*Auteur: Soukaina Moussalli*/
 require_once "auth_check.php";
 ?>
 <!DOCTYPE html>
@@ -48,6 +47,14 @@ require_once "auth_check.php";
 <section class="home-content">
   <h1 class="glow-title">HISTORIQUE DES MATCHS</h1>
 </section>
+
+<input 
+  type="text" 
+  id="searchTeam" 
+  placeholder="Rechercher une équipe..." 
+  onkeyup="filterMatches()"
+  class="search-bar"
+/>
 
 <div id="history" style="max-height: 70vh; overflow-y: scroll; padding: 20px;">
     <p>Chargement de l'historique (40k+ matchs)...</p>

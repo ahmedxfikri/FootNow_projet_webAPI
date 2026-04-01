@@ -447,13 +447,42 @@ function cleanTextValue(value, fallback = '') {
 
 // ===== API FUNCTIONS =====
 
+let apiBaseUrlPromise = null;
+
+async function resolveApiBaseUrl() {
+    if (!apiBaseUrlPromise) {
+        apiBaseUrlPromise = (async () => {
+            const fallbackBase = `${window.location.protocol}//localhost:3070`;
+
+            try {
+                const configResponse = await fetch('/api-config.php', { cache: 'no-store' });
+                if (configResponse.ok) {
+                    const config = await configResponse.json();
+                    const fromConfig = String(config?.apiBaseUrl ?? '').trim().replace(/\/$/, '');
+                    if (fromConfig) {
+                        return fromConfig;
+                    }
+                }
+            } catch (_error) {
+                // Ignore and use fallback
+            }
+
+            const host = window.location.hostname;
+            if (host === 'localhost' || host === '127.0.0.1') {
+                return `${window.location.protocol}//${host}:3070`;
+            }
+
+            return fallbackBase;
+        })();
+    }
+
+    return apiBaseUrlPromise;
+}
+
 // Fonction générique pour appeler l'API
 async function callAPI(endpoint) {
     try {
-        const host = window.location.hostname;
-        const apiBaseUrl = host === 'localhost' || host === '127.0.0.1'
-            ? `${window.location.protocol}//${host}:3070`
-            : '';
+        const apiBaseUrl = await resolveApiBaseUrl();
 
         const response = await fetch(`${apiBaseUrl}${endpoint}`);
         if (!response.ok) {

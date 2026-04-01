@@ -1,9 +1,27 @@
 <?php
+// Detection du contexte d'URL cote client
+$basePath = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME']));
+
+if ($basePath === '/') {
+    $basePath = '';
+}
+
+define('BASE_URL', $_SERVER['SCRIPT_NAME']);
+define('BASE_PATH', $basePath);
+
+$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+$scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$hostNoPort = preg_replace('/:\\d+$/', '', $host);
+$isLocalHost = in_array($hostNoPort, ['localhost', '127.0.0.1'], true);
+
 // URL interne au réseau Docker pour que le container PHP parle au container API
-define('API_URL', 'http://api:3070/api'); 
+$apiInternalUrl = getenv('API_INTERNAL_URL') ?: 'http://api:3070/api';
+define('API_URL', $apiInternalUrl);
 
 // URL publique (utile pour les redirections si besoin, ou JS)
-define('PUBLIC_URL', 'http://localhost:8080');
+define('PUBLIC_URL', $scheme . '://' . $host . BASE_PATH);
+$apiPublicHost = $isLocalHost ? ($hostNoPort . ':3070') : $host;
+define('API_PUBLIC_URL', $scheme . '://' . $apiPublicHost . '/api');
 
 // Fonction pour appeler l'API
 function callAPI($endpoint, $method = 'GET', $data = null, $token = null, &$meta = null) {

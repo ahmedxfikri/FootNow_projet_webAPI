@@ -25,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif (!empty($apiMeta['transport_error']) || (int)($apiMeta['http_code'] ?? 0) === 0) {
         $error = "API inaccessible pour le moment. Verifie que le service API est demarre.";
     } else {
-        $error = "Identifiants incorrects";
+        $error = $apiMeta['error'] ?? "Identifiants incorrects";
     }
 }
 ?>

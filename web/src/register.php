@@ -23,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif (!empty($apiMeta['api_error'])) {
         $error = $apiMeta['api_error'];
     } else {
-        $error = "Impossible de creer le compte.";
+        $error = $apiMeta['error'] ?? "Impossible de creer le compte.";
     }
 }
 ?>

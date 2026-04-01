@@ -1,4 +1,6 @@
 <?php
+/*
+Ancienne configuration (desactivee volontairement)
 // Detection du contexte d'URL cote client
 $basePath = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME']));
 
@@ -36,6 +38,24 @@ if ($apiInternalUrl) {
 // URL publique (utile pour les redirections si besoin, ou JS)
 define('PUBLIC_URL', $scheme . '://' . $host . BASE_PATH);
 define('API_PUBLIC_URL', BASE_URL_API);
+*/
+
+// Nouvelle configuration HTTP basee sur l'host courant
+$basePath = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME']));
+if ($basePath === '/') {
+    $basePath = '';
+}
+
+define('BASE_URL', $_SERVER['SCRIPT_NAME']);
+define('BASE_PATH', $basePath);
+
+// Usage: $url = "$protocol://$host/images/something.jpg";
+$host = $_SERVER['HTTP_HOST'];
+
+define('BASE_URL_API', 'http://' . $host . '/api');
+define('API_URL', BASE_URL_API);
+define('API_PUBLIC_URL', BASE_URL_API);
+define('PUBLIC_URL', 'http://' . $host . BASE_PATH);
 
 // Fonction pour appeler l'API
 function callAPI($endpoint, $method = 'GET', $data = null, $token = null, &$meta = null) {
@@ -49,8 +69,7 @@ function callAPI($endpoint, $method = 'GET', $data = null, $token = null, &$meta
 
     $candidateBases = array_values(array_unique(array_filter([
         API_URL,
-        API_PUBLIC_URL,
-        ($GLOBALS['isLocalHost'] ?? false) ? 'http://localhost:3070/api' : null
+        API_PUBLIC_URL
     ])));
 
     $lastResponse = null;

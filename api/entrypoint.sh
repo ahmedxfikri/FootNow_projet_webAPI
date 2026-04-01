@@ -1,6 +1,8 @@
 #!/bin/sh
 set -e
 
-npx prisma migrate deploy --schema prisma/schema.prisma
-npx tsx prisma/seed.ts
-exec node dist/index.js
+if [ "$#" -gt 0 ]; then
+	exec "$@"
+fi
+
+exec npm run dev

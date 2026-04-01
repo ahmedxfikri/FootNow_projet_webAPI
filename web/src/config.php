@@ -1,63 +1,39 @@
 <?php
-/*
-Ancienne configuration (desactivee volontairement)
-// Detection du contexte d'URL cote client
-$basePath = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME']));
-
+$basePath = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/'));
 if ($basePath === '/') {
     $basePath = '';
 }
 
-define('BASE_URL', $_SERVER['SCRIPT_NAME']);
+define('BASE_URL', $_SERVER['SCRIPT_NAME'] ?? '');
 define('BASE_PATH', $basePath);
 
 $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-$scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 $hostNoPort = preg_replace('/:\\d+$/', '', $host);
 
 $isLocalHost =
     strpos($host, 'localhost') !== false ||
     strpos($host, '127.0.0.1') !== false;
 
+// URL publique visible du navigateur
 if ($isLocalHost) {
     define('BASE_URL_API', 'http://localhost:3070/api');
 } else {
     define('BASE_URL_API', 'https://' . $hostNoPort . '/api');
 }
 
-// URL interne au réseau Docker pour que le container PHP parle au container API
+// URL serveur->API utilisee par PHP (priorite a l'URL interne si fournie)
 $apiInternalUrl = getenv('API_INTERNAL_URL');
-if ($apiInternalUrl) {
-    define('API_URL', $apiInternalUrl);
+if (!empty($apiInternalUrl)) {
+    define('API_URL', rtrim($apiInternalUrl, '/'));
 } elseif ($isLocalHost) {
     define('API_URL', 'http://api:3070/api');
 } else {
     define('API_URL', BASE_URL_API);
 }
 
-// URL publique (utile pour les redirections si besoin, ou JS)
-define('PUBLIC_URL', $scheme . '://' . $host . BASE_PATH);
 define('API_PUBLIC_URL', BASE_URL_API);
-*/
-
-// Nouvelle configuration HTTP basee sur l'host courant
-$basePath = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME']));
-if ($basePath === '/') {
-    $basePath = '';
-}
-
-define('BASE_URL', $_SERVER['SCRIPT_NAME']);
-define('BASE_PATH', $basePath);
-
-// Usage: $url = "$protocol://$host/images/something.jpg";
-$host = $_SERVER['HTTP_HOST'];
-
-define('BASE_URL_API', 'http://' . $host . '/api');
-define('API_URL', BASE_URL_API);
-define('API_PUBLIC_URL', BASE_URL_API);
-define('PUBLIC_URL', 'http://' . $host . BASE_PATH);
-
-echo "Configuration: API_URL=" . API_URL . ", API_PUBLIC_URL=" . API_PUBLIC_URL . ", PUBLIC_URL=" . PUBLIC_URL;
+define('PUBLIC_URL', $protocol . '://' . $host . BASE_PATH);
 
 // Fonction pour appeler l'API
 function callAPI($endpoint, $method = 'GET', $data = null, $token = null, &$meta = null) {
@@ -71,7 +47,8 @@ function callAPI($endpoint, $method = 'GET', $data = null, $token = null, &$meta
 
     $candidateBases = array_values(array_unique(array_filter([
         API_URL,
-        API_PUBLIC_URL
+        API_PUBLIC_URL,
+        ($GLOBALS['isLocalHost'] ?? false) ? 'http://localhost:3070/api' : null
     ])));
 
     $lastResponse = null;

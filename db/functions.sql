@@ -6,7 +6,6 @@
 
 -- =====================================================
 -- FONCTION 1 : Score FIFA normalise
--- Retourne un score entre 0 et 1 base sur les points FIFA
 -- =====================================================
 
 CREATE OR REPLACE FUNCTION get_score_fifa(p_equipe VARCHAR)

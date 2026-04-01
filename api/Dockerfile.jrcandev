@@ -1,42 +1,19 @@
-# I. BUILD
-FROM node:20-bookworm-slim AS builder
+FROM node:20-bookworm-slim
 
 WORKDIR /app
 
-# 1. Dépendances + OpenSSL
+RUN apt-get update && apt-get install -y \
+  openssl ca-certificates libssl-dev \
+  build-essential python3 \
+  postgresql-client \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY package*.json ./
-RUN apt-get update && apt-get install -y openssl ca-certificates && npm install
+RUN npm install
 
-# 2. Schéma Prisma
 COPY prisma ./prisma
-
-# 3. Génération Prisma
 RUN npx prisma generate
 
-# 4. Code applicatif
-COPY tsconfig.json ./
-COPY src ./src
-
-# 5. Build
-RUN npm run build
-
-# II. RUNTIME
-FROM node:20-bookworm-slim AS runtime
-
-WORKDIR /app
-
-# 1. Dépendances prod + OpenSSL
-COPY package*.json ./
-RUN apt-get update && apt-get install -y openssl ca-certificates && npm install --omit=dev
-
-# 2. Prisma engines
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder /app/prisma ./prisma
-
-# 3. Dist
-COPY --from=builder /app/dist ./dist
-
+COPY . .
 EXPOSE 3070
-
-CMD ["node", "dist/index.js"]
+CMD ["npm", "run", "dev"]

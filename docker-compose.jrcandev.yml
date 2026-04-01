@@ -7,6 +7,7 @@ services:
       - .env
     volumes:
       - postgres_sae_data:/var/lib/postgresql/data
+      - ./db:/db
     networks:
       - lan
     healthcheck:
@@ -17,14 +18,14 @@ services:
 
   api:
     container_name: ${NAME}_api
-    build: 
+    build:
       context: ./api
       dockerfile: Dockerfile.jrcandev
     restart: unless-stopped
     env_file:
       - .env
     environment:
-      DATABASE_URL: ${DATABASE_URL}    # ← AJOUTER CETTE LIGNE
+      DATABASE_URL: ${DATABASE_URL}
     volumes:
       - ./db:/db
       - ./db/data:/data
@@ -46,7 +47,7 @@ services:
 
   web:
     container_name: ${NAME}_web
-    build: 
+    build:
       context: ./web
       dockerfile: Dockerfile
     restart: unless-stopped

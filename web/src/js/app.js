@@ -444,6 +444,7 @@ function cleanTextValue(value, fallback = '') {
     }
     return text;
 }
+const apiBaseUrl = "https://sae-footnow-grp8.jrcan.dev";
 
 // ===== API FUNCTIONS =====
 

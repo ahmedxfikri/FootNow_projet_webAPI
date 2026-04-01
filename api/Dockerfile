@@ -8,9 +8,12 @@ RUN apt-get update && apt-get install -y openssl ca-certificates libssl-dev buil
 COPY package*.json ./
 RUN npm install
 
-COPY prisma ./prisma
-RUN npx prisma generate
+COPY entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
 
-COPY . .
-EXPOSE 3070
-CMD ["npm", "run", "dev"]
+ENTRYPOINT ["sh", "entrypoint.sh"]
+
+
+# COPY . .
+# EXPOSE 3070
+#CMD ["npm", "run", "dev"]

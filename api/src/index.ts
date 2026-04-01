@@ -2,7 +2,7 @@ import express from 'express'
 import type {Request, Response} from 'express';
 import crypto from 'node:crypto'
 import bcrypt from 'bcryptjs'
-import { prisma } from './client'
+import { prisma } from './client.js'
 import router from './routes.js'
 
 const SALT_ROUNDS = 10

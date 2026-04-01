@@ -1,6 +1,60 @@
 import { Router } from 'express';
-import { prisma } from './client';
+import { parse } from 'csv-parse/sync';
+import { prisma } from './client.js';
 const router = Router();
+const INVALID_TEXT_VALUES = new Set(['', 'NA', 'N/A', 'NULL', 'UNDEFINED']);
+function isMeaningfulText(value) {
+    if (value === null || value === undefined) {
+        return false;
+    }
+    const normalized = String(value).trim().toUpperCase();
+    return normalized.length > 0 && !INVALID_TEXT_VALUES.has(normalized);
+}
+function toCsv(rows, headers) {
+    const escapeCell = (value) => {
+        const raw = value === null || value === undefined ? '' : String(value);
+        if (/[",\n\r]/.test(raw)) {
+            return `"${raw.replace(/"/g, '""')}"`;
+        }
+        return raw;
+    };
+    const head = headers.join(',');
+    const body = rows
+        .map((row) => headers.map((h) => escapeCell(row[h])).join(','))
+        .join('\n');
+    return `${head}\n${body}`;
+}
+function normalizeImportRows(target, format, payload) {
+    if (format === 'json') {
+        if (!Array.isArray(payload)) {
+            throw new Error('Pour le format json, "data" doit être un tableau');
+        }
+        return payload;
+    }
+    if (typeof payload !== 'string' || !payload.trim()) {
+        throw new Error('Pour le format csv, "data" doit être un texte CSV non vide');
+    }
+    const rows = parse(payload, { columns: true, skip_empty_lines: true, trim: true });
+    if (!Array.isArray(rows) || rows.length === 0) {
+        throw new Error('Aucune ligne CSV valide trouvée');
+    }
+    if (target === 'equipes') {
+        return rows.map((row) => ({
+            nom: row.nom ?? row.Nom ?? row.team ?? row.Team,
+            classement: row.classement ?? row.Classement ?? row.ranking ?? row.Ranking,
+            points_fifa: row.points_fifa ?? row['points fifa'] ?? row['Points FIFA']
+        }));
+    }
+    return rows.map((row) => ({
+        date_match: row.date_match ?? row.date ?? row.Date,
+        equipe1: row.equipe1 ?? row.team1 ?? row['Home Team'],
+        equipe2: row.equipe2 ?? row.team2 ?? row['Away Team'],
+        score1: row.score1 ?? row.scoreteam1,
+        score2: row.score2 ?? row.scoreteam2,
+        tournoi: row.tournoi ?? row.tournament,
+        pays: row.pays ?? row.country
+    }));
+}
 /**
  * GET /api/equipes
  * Retourne le classement des équipes (nom, classement, points FIFA)
@@ -44,8 +98,15 @@ router.get('/matchs-historique', async (req, res) => {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 50;
         const skip = (page - 1) * limit;
+        const validHistoriqueWhere = {
+            score1: { not: null },
+            score2: { not: null },
+            equipe1: { notIn: ['', 'NA', 'N/A', 'null', 'NULL', 'undefined', 'UNDEFINED'] },
+            equipe2: { notIn: ['', 'NA', 'N/A', 'null', 'NULL', 'undefined', 'UNDEFINED'] }
+        };
         const [matchs, total] = await prisma.$transaction([
             prisma.matchHistorique.findMany({
+                where: validHistoriqueWhere,
                 orderBy: [
                     { date_match: 'desc' },
                     { id_match: 'desc' }
@@ -62,7 +123,7 @@ router.get('/matchs-historique', async (req, res) => {
                     pays: true
                 }
             }),
-            prisma.matchHistorique.count()
+            prisma.matchHistorique.count({ where: validHistoriqueWhere })
         ]);
         res.json({
             page,
@@ -122,6 +183,277 @@ router.get('/groupes', async (_req, res) => {
         console.error('Erreur lors de la récupération des groupes:', error);
         res.status(500).json({
             error: 'Erreur lors de la récupération des groupes',
+            details: error instanceof Error ? error.message : 'Erreur inconnue'
+        });
+    }
+});
+/**
+ * POST /api/equipes
+ * Ajoute une equipe
+ */
+router.post('/equipes', async (req, res) => {
+    try {
+        const { nom, classement, points_fifa } = req.body ?? {};
+        if (!nom || typeof nom !== 'string' || !nom.trim()) {
+            return res.status(400).json({ error: 'nom requis' });
+        }
+        const data = {
+            nom: nom.trim()
+        };
+        if (classement !== undefined && classement !== null) {
+            const classementNum = Number(classement);
+            if (!Number.isInteger(classementNum) || classementNum <= 0) {
+                return res.status(400).json({ error: 'classement doit etre un entier > 0' });
+            }
+            data.classement = classementNum;
+        }
+        if (points_fifa !== undefined && points_fifa !== null) {
+            const pointsNum = Number(points_fifa);
+            if (!Number.isFinite(pointsNum) || pointsNum < 0) {
+                return res.status(400).json({ error: 'points_fifa doit etre un nombre >= 0' });
+            }
+            data.points_fifa = pointsNum;
+        }
+        const equipe = await prisma.equipe.create({ data });
+        return res.status(201).json({ message: 'Equipe creee', equipe });
+    }
+    catch (error) {
+        if (error?.code === 'P2002') {
+            return res.status(409).json({ error: 'Cette equipe existe deja' });
+        }
+        console.error('Erreur creation equipe:', error);
+        return res.status(500).json({ error: 'Erreur serveur' });
+    }
+});
+/**
+ * POST /api/matchs-historique
+ * Ajoute un match historique
+ */
+router.post('/matchs-historique', async (req, res) => {
+    try {
+        const { date_match, equipe1, equipe2, score1, score2, tournoi, pays } = req.body ?? {};
+        if (!equipe1 || !equipe2 || !tournoi || !pays) {
+            return res.status(400).json({ error: 'equipe1, equipe2, tournoi et pays requis' });
+        }
+        const s1 = Number(score1);
+        const s2 = Number(score2);
+        if (!Number.isInteger(s1) || !Number.isInteger(s2) || s1 < 0 || s2 < 0) {
+            return res.status(400).json({ error: 'score1 et score2 doivent etre des entiers >= 0' });
+        }
+        const match = await prisma.matchHistorique.create({
+            data: {
+                date_match: date_match ? new Date(date_match) : null,
+                equipe1: String(equipe1).trim(),
+                equipe2: String(equipe2).trim(),
+                score1: s1,
+                score2: s2,
+                tournoi: String(tournoi).trim(),
+                pays: String(pays).trim()
+            }
+        });
+        return res.status(201).json({ message: 'Match historique cree', match });
+    }
+    catch (error) {
+        console.error('Erreur creation match historique:', error);
+        return res.status(500).json({ error: 'Erreur serveur' });
+    }
+});
+/**
+ * POST /api/resultats
+ * Ajoute ou met a jour le resultat d'un match CDM 2026
+ */
+router.post('/resultats', async (req, res) => {
+    try {
+        const { id_match_wc, score_dom, score_ext } = req.body ?? {};
+        const matchId = Number(id_match_wc);
+        const sDom = Number(score_dom);
+        const sExt = Number(score_ext);
+        if (!Number.isInteger(matchId) || matchId <= 0) {
+            return res.status(400).json({ error: 'id_match_wc doit etre un entier > 0' });
+        }
+        if (!Number.isInteger(sDom) || !Number.isInteger(sExt) || sDom < 0 || sExt < 0) {
+            return res.status(400).json({ error: 'score_dom et score_ext doivent etre des entiers >= 0' });
+        }
+        const match = await prisma.matchCdm2026.findUnique({
+            where: { id_match_wc: matchId },
+            select: { id_match_wc: true }
+        });
+        if (!match) {
+            return res.status(404).json({ error: 'Match non trouve' });
+        }
+        const resultat = await prisma.resultat.upsert({
+            where: { id_match_wc: matchId },
+            update: {
+                score_dom: sDom,
+                score_ext: sExt,
+                date_saisie: new Date()
+            },
+            create: {
+                id_match_wc: matchId,
+                score_dom: sDom,
+                score_ext: sExt
+            }
+        });
+        return res.status(201).json({ message: 'Resultat enregistre', resultat });
+    }
+    catch (error) {
+        console.error('Erreur creation resultat:', error);
+        return res.status(500).json({ error: 'Erreur serveur' });
+    }
+});
+/**
+ * POST /api/import/:target
+ * Importe des donnees JSON/CSV dans une table cible
+ */
+router.post('/import/:target', async (req, res) => {
+    try {
+        const target = req.params.target;
+        const format = req.body?.format || 'json';
+        const payload = req.body?.data;
+        if (target !== 'equipes' && target !== 'matchs-historique') {
+            return res.status(400).json({ error: 'target doit etre equipes ou matchs-historique' });
+        }
+        if (format !== 'json' && format !== 'csv') {
+            return res.status(400).json({ error: 'format doit etre json ou csv' });
+        }
+        const rows = normalizeImportRows(target, format, payload);
+        let inserted = 0;
+        let skipped = 0;
+        if (target === 'equipes') {
+            for (const row of rows) {
+                const nom = String(row.nom ?? '').trim();
+                if (!nom) {
+                    skipped++;
+                    continue;
+                }
+                const classement = row.classement === undefined || row.classement === null || row.classement === ''
+                    ? null
+                    : Number(row.classement);
+                const points = row.points_fifa === undefined || row.points_fifa === null || row.points_fifa === ''
+                    ? null
+                    : Number(row.points_fifa);
+                await prisma.equipe.upsert({
+                    where: { nom },
+                    update: {
+                        classement: Number.isFinite(classement) ? classement : null,
+                        points_fifa: Number.isFinite(points) ? points : null
+                    },
+                    create: {
+                        nom,
+                        classement: Number.isFinite(classement) ? classement : null,
+                        points_fifa: Number.isFinite(points) ? points : null
+                    }
+                });
+                inserted++;
+            }
+        }
+        if (target === 'matchs-historique') {
+            for (const row of rows) {
+                const equipe1 = String(row.equipe1 ?? '').trim();
+                const equipe2 = String(row.equipe2 ?? '').trim();
+                const tournoi = String(row.tournoi ?? '').trim();
+                const pays = String(row.pays ?? '').trim();
+                const score1 = Number(row.score1);
+                const score2 = Number(row.score2);
+                if (!equipe1 || !equipe2 || !tournoi || !pays || !Number.isInteger(score1) || !Number.isInteger(score2) || score1 < 0 || score2 < 0) {
+                    skipped++;
+                    continue;
+                }
+                await prisma.matchHistorique.create({
+                    data: {
+                        date_match: row.date_match ? new Date(String(row.date_match)) : null,
+                        equipe1,
+                        equipe2,
+                        score1,
+                        score2,
+                        tournoi,
+                        pays
+                    }
+                });
+                inserted++;
+            }
+        }
+        return res.status(200).json({
+            message: 'Import termine',
+            target,
+            format,
+            total_lignes: rows.length,
+            inserted,
+            skipped
+        });
+    }
+    catch (error) {
+        console.error('Erreur import:', error);
+        return res.status(500).json({
+            error: 'Erreur lors de l\'import',
+            details: error instanceof Error ? error.message : 'Erreur inconnue'
+        });
+    }
+});
+/**
+ * GET /api/export/:target?format=json|csv
+ * Exporte les donnees d'une table cible en JSON ou CSV
+ */
+router.get('/export/:target', async (req, res) => {
+    try {
+        const target = req.params.target;
+        const format = (req.query.format || 'json').toLowerCase();
+        if (target !== 'equipes' && target !== 'matchs-historique') {
+            return res.status(400).json({ error: 'target doit etre equipes ou matchs-historique' });
+        }
+        if (format !== 'json' && format !== 'csv') {
+            return res.status(400).json({ error: 'format doit etre json ou csv' });
+        }
+        if (target === 'equipes') {
+            const equipes = await prisma.equipe.findMany({
+                orderBy: [{ classement: 'asc' }, { nom: 'asc' }],
+                select: { nom: true, classement: true, points_fifa: true }
+            });
+            if (format === 'json') {
+                return res.status(200).json({ total: equipes.length, data: equipes });
+            }
+            const csv = toCsv(equipes.map((e) => ({
+                nom: e.nom,
+                classement: e.classement,
+                points_fifa: e.points_fifa
+            })), ['nom', 'classement', 'points_fifa']);
+            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+            res.setHeader('Content-Disposition', 'attachment; filename="equipes.csv"');
+            return res.status(200).send(csv);
+        }
+        const matchs = await prisma.matchHistorique.findMany({
+            orderBy: [{ date_match: 'desc' }, { id_match: 'desc' }],
+            select: {
+                date_match: true,
+                equipe1: true,
+                equipe2: true,
+                score1: true,
+                score2: true,
+                tournoi: true,
+                pays: true
+            }
+        });
+        const rows = matchs.map((m) => ({
+            date_match: m.date_match ? m.date_match.toISOString().slice(0, 10) : '',
+            equipe1: m.equipe1,
+            equipe2: m.equipe2,
+            score1: m.score1,
+            score2: m.score2,
+            tournoi: m.tournoi,
+            pays: m.pays
+        }));
+        if (format === 'json') {
+            return res.status(200).json({ total: rows.length, data: rows });
+        }
+        const csv = toCsv(rows, ['date_match', 'equipe1', 'equipe2', 'score1', 'score2', 'tournoi', 'pays']);
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename="matchs-historique.csv"');
+        return res.status(200).send(csv);
+    }
+    catch (error) {
+        console.error('Erreur export:', error);
+        return res.status(500).json({
+            error: 'Erreur lors de l\'export',
             details: error instanceof Error ? error.message : 'Erreur inconnue'
         });
     }

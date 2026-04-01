@@ -39,8 +39,6 @@ define('API_PUBLIC_URL', BASE_URL_API);
 
 // Fonction pour appeler l'API
 function callAPI($endpoint, $method = 'GET', $data = null, $token = null, &$meta = null) {
-    $url = API_URL . $endpoint;
-
     $meta = [
         'ok' => false,
         'http_code' => 0,
@@ -48,54 +46,79 @@ function callAPI($endpoint, $method = 'GET', $data = null, $token = null, &$meta
         'error' => null,
         'api_error' => null
     ];
-    
-    $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-    
-    $headers = [];
-    
-    if ($method === 'POST') {
-        curl_setopt($ch, CURLOPT_POST, true);
-        if ($data !== null) {
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-            $headers[] = 'Content-Type: application/json';
+
+    $candidateBases = array_values(array_unique(array_filter([
+        API_URL,
+        API_PUBLIC_URL,
+        ($GLOBALS['isLocalHost'] ?? false) ? 'http://localhost:3070/api' : null
+    ])));
+
+    $lastResponse = null;
+    $lastCurlError = null;
+    $lastDecoded = null;
+
+    foreach ($candidateBases as $candidateBase) {
+        $url = rtrim($candidateBase, '/') . $endpoint;
+
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+
+        $headers = [];
+
+        if ($method === 'POST') {
+            curl_setopt($ch, CURLOPT_POST, true);
+            if ($data !== null) {
+                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+                $headers[] = 'Content-Type: application/json';
+            }
+        }
+
+        if ($token) {
+            $headers[] = 'Authorization: Bearer ' . $token;
+        }
+
+        if (!empty($headers)) {
+            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        }
+
+        $response = curl_exec($ch);
+        $curlError = curl_error($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        $lastResponse = $response;
+        $lastCurlError = $curlError;
+        $lastDecoded = is_string($response) ? json_decode($response, true) : null;
+
+        $meta['http_code'] = (int)$httpCode;
+
+        if ($response !== false && $httpCode >= 200 && $httpCode < 300) {
+            $meta['ok'] = true;
+            return is_array($lastDecoded) ? $lastDecoded : [];
+        }
+
+        $shouldRetry = ($response === false) || in_array((int)$httpCode, [0, 404, 500, 502, 503, 504], true);
+        if ($shouldRetry && $candidateBase !== end($candidateBases)) {
+            continue;
+        }
+
+        if ($response === false) {
+            $meta['transport_error'] = true;
+            $meta['error'] = $curlError ?: 'API inaccessible';
+            continue;
+        }
+
+        if (is_array($lastDecoded) && isset($lastDecoded['error'])) {
+            $meta['api_error'] = (string)$lastDecoded['error'];
+            $meta['error'] = (string)$lastDecoded['error'];
+        } else {
+            $meta['error'] = 'Erreur API';
         }
     }
-    
-    if ($token) {
-        $headers[] = 'Authorization: Bearer ' . $token;
-    }
 
-    if (!empty($headers)) {
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    }
-    
-    $response = curl_exec($ch);
-    $curlError = curl_error($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    $meta['http_code'] = (int)$httpCode;
-    
-    if ($response === false) {
-        $meta['transport_error'] = true;
-        $meta['error'] = $curlError ?: 'API inaccessible';
-        return null;
-    }
-
-    $decoded = json_decode($response, true);
-
-    if ($httpCode >= 200 && $httpCode < 300) {
-        $meta['ok'] = true;
-        return is_array($decoded) ? $decoded : [];
-    }
-
-    if (is_array($decoded) && isset($decoded['error'])) {
-        $meta['api_error'] = (string)$decoded['error'];
-        $meta['error'] = (string)$decoded['error'];
-    } else {
-        $meta['error'] = 'Erreur API';
+    if ($meta['error'] === null) {
+        $meta['error'] = $lastCurlError ?: 'API inaccessible';
     }
 
     return null;

@@ -452,7 +452,11 @@ let apiBaseUrlPromise = null;
 async function resolveApiBaseUrl() {
     if (!apiBaseUrlPromise) {
         apiBaseUrlPromise = (async () => {
-            const fallbackBase = `${window.location.protocol}//localhost:3070`;
+            const host = window.location.hostname;
+            const fallbackBase =
+                (host === 'localhost' || host === '127.0.0.1')
+                    ? `${window.location.protocol}//${host}:3070`
+                    : `${window.location.protocol}//${window.location.host}`;
 
             try {
                 const configResponse = await fetch('/api-config.php', { cache: 'no-store' });
@@ -465,11 +469,6 @@ async function resolveApiBaseUrl() {
                 }
             } catch (_error) {
                 // Ignore and use fallback
-            }
-
-            const host = window.location.hostname;
-            if (host === 'localhost' || host === '127.0.0.1') {
-                return `${window.location.protocol}//${host}:3070`;
             }
 
             return fallbackBase;

@@ -12,16 +12,30 @@ define('BASE_PATH', $basePath);
 $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
 $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 $hostNoPort = preg_replace('/:\\d+$/', '', $host);
-$isLocalHost = in_array($hostNoPort, ['localhost', '127.0.0.1'], true);
+
+$isLocalHost =
+    strpos($host, 'localhost') !== false ||
+    strpos($host, '127.0.0.1') !== false;
+
+if ($isLocalHost) {
+    define('BASE_URL_API', 'http://localhost:3070/api');
+} else {
+    define('BASE_URL_API', 'https://' . $hostNoPort . '/api');
+}
 
 // URL interne au réseau Docker pour que le container PHP parle au container API
-$apiInternalUrl = getenv('API_INTERNAL_URL') ?: 'http://api:3070/api';
-define('API_URL', $apiInternalUrl);
+$apiInternalUrl = getenv('API_INTERNAL_URL');
+if ($apiInternalUrl) {
+    define('API_URL', $apiInternalUrl);
+} elseif ($isLocalHost) {
+    define('API_URL', 'http://api:3070/api');
+} else {
+    define('API_URL', BASE_URL_API);
+}
 
 // URL publique (utile pour les redirections si besoin, ou JS)
 define('PUBLIC_URL', $scheme . '://' . $host . BASE_PATH);
-$apiPublicHost = $isLocalHost ? ($hostNoPort . ':3070') : $host;
-define('API_PUBLIC_URL', $scheme . '://' . $apiPublicHost . '/api');
+define('API_PUBLIC_URL', BASE_URL_API);
 
 // Fonction pour appeler l'API
 function callAPI($endpoint, $method = 'GET', $data = null, $token = null, &$meta = null) {

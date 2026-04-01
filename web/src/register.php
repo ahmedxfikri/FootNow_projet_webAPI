@@ -1,14 +1,30 @@
 <?php
 session_start();
+require_once "config.php";
 
 $success = false;
+$error = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $_SESSION['registered_email'] = $_POST['email'];
-    $_SESSION['registered_password'] = $_POST['password'];
-    $_SESSION['registered_created_at'] = date('c');
+    $email = trim($_POST['email'] ?? '');
+    $password = $_POST['password'] ?? '';
+    $apiMeta = [];
 
-    $success = true;
+    $response = callAPI('/register', 'POST', [
+        'login' => $email,
+        'password' => $password
+    ], null, $apiMeta);
+
+    if ($response && isset($response['user'])) {
+        $_SESSION['registered_created_at'] = date('c');
+        $success = true;
+    } elseif (!empty($apiMeta['transport_error']) || (int)($apiMeta['http_code'] ?? 0) === 0) {
+        $error = "API inaccessible pour le moment. Verifie que le service API est demarre.";
+    } elseif (!empty($apiMeta['api_error'])) {
+        $error = $apiMeta['api_error'];
+    } else {
+        $error = "Impossible de creer le compte.";
+    }
 }
 ?>
 
@@ -35,6 +51,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="auth-form">
 
         <h2>Inscription</h2>
+
+        <?php if ($error): ?>
+            <p class="error"><?php echo $error; ?></p>
+        <?php endif; ?>
 
         <?php if ($success): ?>
             <p class="success">Compte créé avec succès</p>

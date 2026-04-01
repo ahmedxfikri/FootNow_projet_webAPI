@@ -1,23 +1,29 @@
 <?php
 session_start();
+require_once "config.php";
 
 $error = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $email = $_POST['email'];
-    $password = $_POST['password'];
+    $email = trim($_POST['email'] ?? '');
+    $password = $_POST['password'] ?? '';
+    $apiMeta = [];
 
-    if (
-        isset($_SESSION['registered_email']) &&
-        $email === $_SESSION['registered_email'] &&
-        $password === $_SESSION['registered_password']
-    ) {
-        $_SESSION['user_token'] = "fake_token";
-        $_SESSION['user_email'] = $email;
-        $_SESSION['user_created_at'] = $_SESSION['registered_created_at'] ?? date('c');
+    $response = callAPI('/login', 'POST', [
+        'login' => $email,
+        'password' => $password
+    ], null, $apiMeta);
 
+    if ($response && isset($response['token'])) {
+        $_SESSION['user_token'] = $response['token'];
+        $_SESSION['user_email'] = $response['user']['login'] ?? $email;
+        if (!isset($_SESSION['user_created_at'])) {
+            $_SESSION['user_created_at'] = date('c');
+        }
         header("Location: index.php");
         exit();
+    } elseif (!empty($apiMeta['transport_error']) || (int)($apiMeta['http_code'] ?? 0) === 0) {
+        $error = "API inaccessible pour le moment. Verifie que le service API est demarre.";
     } else {
         $error = "Identifiants incorrects";
     }

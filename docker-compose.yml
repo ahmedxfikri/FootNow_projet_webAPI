@@ -24,7 +24,7 @@ services:
     container_name: ${NAME}_api
     build: ./api
     restart: unless-stopped
-    command: sh -c "npx prisma db seed && npm run dev"
+    command: sh -c "npx prisma db seed && npm run build && npm run start"
     env_file:
       - .env
     volumes:

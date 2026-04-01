@@ -16,4 +16,4 @@ RUN npx prisma generate
 
 COPY . .
 EXPOSE 3070
-CMD ["npm", "run", "dev"]
+CMD ["npm", "run", "start"]

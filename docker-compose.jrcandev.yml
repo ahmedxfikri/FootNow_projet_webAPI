@@ -28,7 +28,8 @@ services:
         psql $$DATABASE_URL -f /db/functions.sql &&
         psql $$DATABASE_URL -f /db/triggers.sql &&
         npx prisma db seed &&
-        npm run dev
+        npm run build &&
+        npm run start
       "
     env_file:
       - .env

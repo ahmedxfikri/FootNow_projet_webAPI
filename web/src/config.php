@@ -57,6 +57,8 @@ define('API_URL', BASE_URL_API);
 define('API_PUBLIC_URL', BASE_URL_API);
 define('PUBLIC_URL', 'http://' . $host . BASE_PATH);
 
+echo "Configuration: API_URL=" . API_URL . ", API_PUBLIC_URL=" . API_PUBLIC_URL . ", PUBLIC_URL=" . PUBLIC_URL;
+
 // Fonction pour appeler l'API
 function callAPI($endpoint, $method = 'GET', $data = null, $token = null, &$meta = null) {
     $meta = [
